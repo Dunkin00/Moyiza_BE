@@ -1,55 +1,54 @@
 package com.example.moyiza_be.common.utils;
 
-import com.example.moyiza_be.chat.dto.ChatMessageInput;
-import lombok.extern.slf4j.Slf4j;
+import jakarta.annotation.PostConstruct;
 import org.springframework.stereotype.Component;
 
-import java.util.HashSet;
-import java.util.List;
-import java.util.Set;
+import java.util.*;
 import java.util.regex.Pattern;
 
 @Component
-@Slf4j
 public class BadWordFiltering implements BadWords {
     private final Set<String> badWordsSet = new HashSet<>(List.of(badWords));
+    private final Map<String, Pattern> badWordPatterns = new HashMap<>();
 
-    public boolean checkBadWord(String input) {
+    @PostConstruct
+    public void compileBadWordPatterns() {
         String patternText = buildPatternText();
 
         for (String word : badWordsSet) {
             String[] chars = word.split("");
-            if (Pattern.compile(String.join(patternText, chars))
-                    .matcher(input)
-                    .find()) return true;
+            badWordPatterns.put(word, Pattern.compile(String.join(patternText, chars)));
+        }
+    }
+
+    public boolean checkBadWord(String input) {
+        for (Pattern pattern : badWordPatterns.values()) {
+            if (pattern.matcher(input).find()) {
+                return true;
+            }
         }
         return false;
     }
 
-    public ChatMessageInput change(ChatMessageInput chatMessageInput) {
-        String text = chatMessageInput.getContent();
-        String patternText = buildPatternText();
-
-        for (String word : badWordsSet) {
-            if (word.length() == 1) {
+    public String change(String text) {
+        for (Map.Entry<String, Pattern> entry : badWordPatterns.entrySet()) {
+            String word = entry.getKey();
+            Pattern pattern = entry.getValue();
+            if (word.length() == 1){
                 text = text.replace(word, substituteValue);
             }
-            String[] chars = word.split("");
-            text = Pattern.compile(String.join(patternText, chars))
-                    .matcher(text)
-                    .replaceAll(matchedWord -> substituteValue.repeat(matchedWord.group().length()));
+            text = pattern.matcher(text).replaceAll(matchedWord ->
+                            substituteValue.repeat(matchedWord.group().length()));
         }
-        chatMessageInput.setContent(text);
-
-        return chatMessageInput;
+        return text;
     }
 
     private String buildPatternText() {
-        StringBuilder delimiterBuilder = new StringBuilder("[");
+        StringBuilder patternBuilder = new StringBuilder("[");
         for (String delimiter : delimiters) {
-            delimiterBuilder.append(Pattern.quote(delimiter));
+            patternBuilder.append(Pattern.quote(delimiter));
         }
-        delimiterBuilder.append("]*");
-        return delimiterBuilder.toString();
+        patternBuilder.append("]*");
+        return patternBuilder.toString();
     }
 }
